@@ -1,0 +1,3 @@
+# このファイルを config という名前で写し、out= を自分の出力先に書き換える。
+# out= には、既にあるフォルダを絶対パスで書く（先頭の ~ はホームフォルダ）。
+out=/Volumes/NAS/share/gboard-import
