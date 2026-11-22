@@ -85,23 +85,23 @@ Macのユーザ辞書がこうなっているとします。
 1. `dictionary.txt`をAndroidの端末に入れます（Googleドライブ、USBケーブルなど）。
 2. Gboardの設定を開き、「単語リスト」を選びます。
 
-   <img src="docs/images/import-1-settings.jpg" width="240" alt="Gboardの設定で「単語リスト」を選ぶ">
+   <img src="docs/images/import-1-settings.jpg" width="400" alt="Gboardの設定で「単語リスト」を選ぶ">
 
 3. 「単語リスト」を選びます。
 
-   <img src="docs/images/import-2-word-list.jpg" width="240" alt="「単語リスト」を選ぶ">
+   <img src="docs/images/import-2-word-list.jpg" width="400" alt="「単語リスト」を選ぶ">
 
 4. 「日本語」を選びます。
 
-   <img src="docs/images/import-3-language.jpg" width="240" alt="「日本語」を選ぶ">
+   <img src="docs/images/import-3-language.jpg" width="400" alt="「日本語」を選ぶ">
 
 5. 右上のメニューを開きます。
 
-   <img src="docs/images/import-4-menu.jpg" width="240" alt="右上のメニューを開く">
+   <img src="docs/images/import-4-menu.jpg" width="400" alt="右上のメニューを開く">
 
 6. 「インポート」を選び、`dictionary.txt`を選びます。
 
-   <img src="docs/images/import-5-import.jpg" width="240" alt="「インポート」を選ぶ">
+   <img src="docs/images/import-5-import.jpg" width="400" alt="「インポート」を選ぶ">
 
 Gboard 18.6.7（Android 17）で確認しました。
 
