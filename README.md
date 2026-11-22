@@ -2,6 +2,8 @@
 
 Macの「テキストの置換」（日本語の画面では「ユーザ辞書」）を書き出すスクリプトです。書き出した`dictionary.txt`は、Android版Gboardの単語リストに取り込めます。
 
+対象はAndroid版のGboardだけです。iPhone版のGboardには、単語リストを取り込む機能がありません。
+
 ## 何をするか
 
 - Macのユーザ辞書の実体（`~/Library/KeyboardServices/TextReplacements.db`）を読み取り専用で直接読みます。システム設定から一覧をドラッグして書き出す必要はありません。
@@ -12,7 +14,7 @@ Macの「テキストの置換」（日本語の画面では「ユーザ辞書�
 
 - macOS
 - Python 3（3.15で確認）。標準ライブラリだけを使います。
-- 取り込む先はAndroid版のGboardです。
+- Android版のGboard
 
 ## 準備
 
