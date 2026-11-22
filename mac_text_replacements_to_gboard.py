@@ -69,13 +69,13 @@ def resolve_output_dir(out_arg, config_path):
         example = config_path.with_name("config.example")
         raise ToolError(
             "出力先が決まっていません。"
-            f"{example} を {config_path} という名前で写し、out= に出力先のフォルダを書いてください。"
+            f"{example} を {config_path} という名前でコピーし、out= に出力先のフォルダを書いてください。"
             "一度だけ別の場所に出すときは --out <フォルダ> を付けます。"
         )
     if not out_dir.is_dir():
         raise ToolError(
             f"出力先のフォルダがありません: {out_dir}"
-            "（自動では作りません。NASの場合は、つながっているかを確かめてください）"
+            "（自動では作りません。ネットワーク上のフォルダの場合は、つながっているかを確かめてください）"
         )
     return out_dir
 
@@ -135,7 +135,7 @@ def write_atomic(out_dir, text):
             f.write(text)
             f.flush()
             os.fsync(f.fileno())
-        # mkstempは0600で作るので、普通のファイルと同じ権限にする（NASの別のユーザーから読めるように）
+        # mkstempは0600で作るので、普通のファイルと同じ権限にする（ネットワーク上のフォルダで別のユーザーから読めるように）
         os.chmod(tmp, 0o666 & ~current_umask())
         os.replace(tmp, target)
     except BaseException:
