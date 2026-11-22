@@ -1,5 +1,14 @@
 #!/usr/bin/env python3
-"""Macのテキストの置換（ユーザ辞書）を、Gboardの単語リストに取り込めるファイルに書き出す。"""
+"""Macのテキストの置換（ユーザ辞書）を、Gboardの単語リストに取り込めるファイルに書き出す。
+
+Macのユーザ辞書（~/Library/KeyboardServices/TextReplacements.db）を読み取り専用で読み、
+全件をGboardの単語リストの形式（version:2）で dictionary.txt に書き出す。
+書き出し先は、このファイルと同じフォルダにある config の out= か、--out で指定する。
+
+使い方:
+    ./mac_text_replacements_to_gboard.py
+    ./mac_text_replacements_to_gboard.py --out ~/Desktop
+"""
 
 import argparse
 import os
@@ -18,6 +27,7 @@ HEADER = (
 )
 CONFIG_KEYS = ("out",)
 FORBIDDEN_CHARS = ("\t", "\r", "\n")
+# 消した印（ZWASDELETED）がNULLの行もあるので、NULLは消していない語として扱う
 QUERY = (
     "SELECT ZSHORTCUT, ZPHRASE FROM ZTEXTREPLACEMENTENTRY "
     "WHERE ifnull(ZWASDELETED, 0) = 0"
@@ -34,6 +44,10 @@ def default_config_path():
 
 
 def read_config(path):
+    """configを読み、{キー: 値}を返す。
+
+    空行と#で始まる行は読み飛ばす。「キー=値」の形でない行、知らないキー、空の値はエラーにする。
+    """
     values = {}
     try:
         with open(path, encoding="utf-8") as f:
@@ -56,6 +70,11 @@ def read_config(path):
 
 
 def resolve_output_dir(out_arg, config_path):
+    """書き出し先のフォルダを決める。
+
+    --out があれば config より優先する。config の out= は絶対パス（先頭の ~ は可）に限る。
+    フォルダが無ければ作らずにエラーにする。
+    """
     if out_arg:
         out_dir = Path(os.path.expanduser(out_arg))
     elif config_path.is_file():
@@ -81,6 +100,7 @@ def resolve_output_dir(out_arg, config_path):
 
 
 def read_entries(db_arg):
+    """辞書を読み取り専用で開き、消した語を除いた（読み, 語）の組の並びを返す。"""
     db = Path(os.path.expanduser(db_arg))
     if not db.is_file():
         raise ToolError(f"辞書のファイルがありません: {db}")
@@ -99,10 +119,12 @@ def read_entries(db_arg):
 
 
 def is_valid(value):
+    """Gboardの1行に入れられる値か（空でなく、タブ・CR・LFを含まない文字列か）。"""
     return isinstance(value, str) and value != "" and not any(c in value for c in FORBIDDEN_CHARS)
 
 
 def validate(rows):
+    """（読み, 語）の組の並びを調べ、0件か、入れられない語が1つでもあればエラーにする。"""
     if not rows:
         raise ToolError("辞書に語が1件もありません。何も書き出していません。")
     bad = [(s, p) for s, p in rows if not (is_valid(s) and is_valid(p))]
@@ -116,6 +138,10 @@ def validate(rows):
 
 
 def build_text(rows):
+    """（読み, 語）の組の並びから、ファイルの中身と件数を返す。
+
+    同じ組は1つにまとめ、毎回同じ中身になるよう（読み, 語）の順に並べる。
+    """
     pairs = sorted(set(rows))
     body = "".join(f"{s}\t{p}\t{LANGUAGE_TAG}\t\n" for s, p in pairs)
     return HEADER + body, len(pairs)
@@ -128,6 +154,10 @@ def current_umask():
 
 
 def write_atomic(out_dir, text):
+    """一時ファイルに書いてから dictionary.txt へ名前を変え、書いたパスを返す。
+
+    途中で失敗しても、書きかけの dictionary.txt や一時ファイルを残さない。
+    """
     target = out_dir / OUTPUT_NAME
     fd, tmp = tempfile.mkstemp(prefix=".dictionary.", suffix=".tmp", dir=out_dir)
     try:
@@ -148,6 +178,10 @@ def write_atomic(out_dir, text):
 
 
 def main(argv=None, config_path=None):
+    """コマンドの入口。終了コード（成功は0、エラーは1）を返す。
+
+    config_path は、テストで config の場所を差し替えるためのもの。
+    """
     parser = argparse.ArgumentParser(
         description="Macのテキストの置換（ユーザ辞書）を、Gboardの単語リストに取り込める dictionary.txt に書き出す。",
     )
