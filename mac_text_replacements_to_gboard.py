@@ -13,6 +13,7 @@ Macのユーザ辞書（~/Library/KeyboardServices/TextReplacements.db）を読�
 import argparse
 import os
 import sqlite3
+import stat
 import sys
 import tempfile
 from pathlib import Path
@@ -46,12 +47,15 @@ def default_config_path():
 def read_config(path):
     """configを読み、{キー: 値}を返す。
 
-    空行と#で始まる行は読み飛ばす。「キー=値」の形でない行、知らないキー、空の値はエラーにする。
+    UTF-8（BOMの有無は問わない）で読む。空行と#で始まる行は読み飛ばす。
+    「キー=値」の形でない行、知らないキー、空の値、引用符で囲んだ値はエラーにする。
     """
     values = {}
     try:
-        with open(path, encoding="utf-8") as f:
+        with open(path, encoding="utf-8-sig") as f:
             lines = f.read().splitlines()
+    except UnicodeDecodeError as e:
+        raise ToolError(f"configをUTF-8として読めません: {path}（UTF-8で保存し直してください）") from e
     except OSError as e:
         raise ToolError(f"configを読めません: {path}（{e.strerror}）") from e
     for lineno, raw in enumerate(lines, 1):
@@ -65,6 +69,8 @@ def read_config(path):
             raise ToolError(f"{path}の{lineno}行目のキー「{key}」は使えません（使えるのは out だけです）")
         if not value:
             raise ToolError(f"{path}の{lineno}行目の値が空です")
+        if value[0] in "\"'":
+            raise ToolError(f"{path}の{lineno}行目の値は引用符で囲まずに書いてください（空白もそのまま書きます）")
         values[key] = value
     return values
 
@@ -75,7 +81,9 @@ def resolve_output_dir(out_arg, config_path):
     --out があれば config より優先する。config の out= は絶対パス（先頭の ~ は可）に限る。
     フォルダが無ければ作らずにエラーにする。
     """
-    if out_arg:
+    if out_arg is not None:
+        if not out_arg:
+            raise ToolError("--out の値が空です")
         out_dir = Path(os.path.expanduser(out_arg))
     elif config_path.is_file():
         out = read_config(config_path).get("out")
@@ -157,16 +165,25 @@ def write_atomic(out_dir, text):
     """一時ファイルに書いてから dictionary.txt へ名前を変え、書いたパスを返す。
 
     途中で失敗しても、書きかけの dictionary.txt や一時ファイルを残さない。
+    既にある dictionary.txt の権限は引き継ぐ。新しく作るときは普通のファイルと同じ権限にする。
     """
     target = out_dir / OUTPUT_NAME
-    fd, tmp = tempfile.mkstemp(prefix=".dictionary.", suffix=".tmp", dir=out_dir)
+    try:
+        fd, tmp = tempfile.mkstemp(prefix=".dictionary.", suffix=".tmp", dir=out_dir)
+    except OSError as e:
+        raise ToolError(f"書き出し先のフォルダに書き込めません: {out_dir}（{e.strerror}）") from e
     try:
         with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as f:
             f.write(text)
             f.flush()
             os.fsync(f.fileno())
-        # mkstempは0600で作るので、普通のファイルと同じ権限にする（ネットワーク上のフォルダで別のユーザーから読めるように）
-        os.chmod(tmp, 0o666 & ~current_umask())
+        # mkstempは0600で作るので、そのままだとネットワーク上のフォルダで別のユーザーから読めない。
+        # 既にあるファイルの権限は、本人が絞っている場合があるので広げない。
+        try:
+            mode = stat.S_IMODE(os.stat(target).st_mode)
+        except FileNotFoundError:
+            mode = 0o666 & ~current_umask()
+        os.chmod(tmp, mode)
         os.replace(tmp, target)
     except BaseException:
         try:

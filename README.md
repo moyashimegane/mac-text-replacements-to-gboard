@@ -18,14 +18,21 @@ Macの「テキストの置換」（日本語の画面では「ユーザ辞書�
 
 ## 準備
 
-1. このリポジトリをcloneします。
+1. このリポジトリをcloneし、そのフォルダに移ります。
+
+```sh
+git clone https://github.com/moyashimegane/mac-text-replacements-to-gboard.git
+cd mac-text-replacements-to-gboard
+```
+
 2. 書き出し先のフォルダを作っておきます。スクリプトはフォルダを作りません。
 3. `config.example`を`config`という名前でコピーします。
-4. `config`の`out=`に、書き出し先のフォルダを絶対パスで書きます。先頭の`~`はホームフォルダです。
 
 ```sh
 cp config.example config
 ```
+
+4. `config`の`out=`に、書き出し先のフォルダを絶対パスで書きます。先頭の`~`はホームフォルダです。引用符や`\`は付けず、空白もそのまま書きます。
 
 ```text
 out=~/Documents/gboard

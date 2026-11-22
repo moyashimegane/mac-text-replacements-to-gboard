@@ -107,6 +107,19 @@ class FormatTest(ToolTestCase):
         mode = stat.S_IMODE((self.out / "dictionary.txt").stat().st_mode)
         self.assertEqual(mode, 0o644)
 
+    def test_keeps_mode_of_existing_file(self):
+        make_db(self.db, [("あ", "語", 0)])
+        existing = self.out / "dictionary.txt"
+        existing.write_text("old", encoding="utf-8")
+        os.chmod(existing, 0o600)
+        old = os.umask(0o022)
+        try:
+            self.assertEqual(self.run_to_out()[0], 0)
+        finally:
+            os.umask(old)
+        self.assertEqual(stat.S_IMODE(existing.stat().st_mode), 0o600)
+        self.assertEqual(self.output_lines()[:2], HEADER_LINES)
+
 
 class ValidationTest(ToolTestCase):
     def assert_stops_without_writing(self, rows, message):
@@ -128,6 +141,9 @@ class ValidationTest(ToolTestCase):
     def test_empty_and_null(self):
         self.assert_stops_without_writing([("", "語", 0), ("い", None, 0)], "入れられない語が2件")
 
+    def test_non_text_value(self):
+        self.assert_stops_without_writing([("あ", b"\xe8\xaa\x9e", 0)], "入れられない語が1件")
+
     def test_no_entries(self):
         self.assert_stops_without_writing([("う", "消した語", 1)], "1件もありません")
 
@@ -141,6 +157,26 @@ class OutputDirTest(ToolTestCase):
         self.assertIn("出力先のフォルダがありません", stderr)
         self.assertFalse(missing.exists())
         self.assertFalse(missing.parent.exists())
+
+    def test_empty_out_option(self):
+        make_db(self.db, [("あ", "語", 0)])
+        self.config.write_text(f"out={self.out}\n", encoding="utf-8")
+        code, _, stderr = self.run_tool("--db", str(self.db), "--out", "")
+        self.assertEqual(code, 1)
+        self.assertIn("--out の値が空です", stderr)
+        self.assertFalse((self.out / "dictionary.txt").exists())
+
+    @unittest.skipIf(hasattr(os, "geteuid") and os.geteuid() == 0, "rootは権限に関係なく書けるため")
+    def test_unwritable_output_dir(self):
+        make_db(self.db, [("あ", "語", 0)])
+        os.chmod(self.out, 0o555)
+        try:
+            code, _, stderr = self.run_to_out()
+        finally:
+            os.chmod(self.out, 0o755)
+        self.assertEqual(code, 1)
+        self.assertIn("書き出し先のフォルダに書き込めません", stderr)
+        self.assertEqual(list(self.out.iterdir()), [])
 
     def test_no_temp_file_left_when_replace_fails(self):
         make_db(self.db, [("あ", "語", 0)])
@@ -198,6 +234,42 @@ class ConfigTest(ToolTestCase):
         self.assertEqual(code, 1)
         self.assertIn("キー=値", stderr)
 
+    def test_utf8_with_bom(self):
+        self.config.write_bytes(b"\xef\xbb\xbf" + f"out={self.out}\n".encode("utf-8"))
+        self.assertEqual(self.run_tool("--db", str(self.db))[0], 0)
+        self.assertTrue((self.out / "dictionary.txt").is_file())
+
+    def test_not_utf8(self):
+        self.config.write_bytes(f"# 書き出し先\nout={self.out}\n".encode("shift_jis"))
+        code, _, stderr = self.run_tool("--db", str(self.db))
+        self.assertEqual(code, 1)
+        self.assertIn("UTF-8で保存し直してください", stderr)
+
+    def test_quoted_value(self):
+        self.config.write_text(f'out="{self.out}"\n', encoding="utf-8")
+        code, _, stderr = self.run_tool("--db", str(self.db))
+        self.assertEqual(code, 1)
+        self.assertIn("引用符で囲まずに", stderr)
+
+    def test_value_with_space(self):
+        spaced = self.root / "my drive"
+        spaced.mkdir()
+        self.config.write_text(f"out={spaced}\n", encoding="utf-8")
+        self.assertEqual(self.run_tool("--db", str(self.db))[0], 0)
+        self.assertTrue((spaced / "dictionary.txt").is_file())
+
+    def test_no_out_line(self):
+        self.config.write_text("# コメントだけ\n", encoding="utf-8")
+        code, _, stderr = self.run_tool("--db", str(self.db))
+        self.assertEqual(code, 1)
+        self.assertIn("out= の行がありません", stderr)
+
+    def test_empty_value(self):
+        self.config.write_text("out=\n", encoding="utf-8")
+        code, _, stderr = self.run_tool("--db", str(self.db))
+        self.assertEqual(code, 1)
+        self.assertIn("値が空です", stderr)
+
     def test_relative_out_in_config(self):
         self.config.write_text("out=out\n", encoding="utf-8")
         code, _, stderr = self.run_tool("--db", str(self.db))
@@ -225,6 +297,15 @@ class DatabaseTest(ToolTestCase):
         code, _, stderr = self.run_tool("--db", str(db), "--out", str(self.out))
         self.assertEqual(code, 0, stderr)
         self.assertEqual(self.output_lines()[2], "あ\t語\tja-JP\t")
+
+    def test_opens_database_read_only(self):
+        make_db(self.db, [("あ", "語", 0)])
+        with mock.patch.object(tool.sqlite3, "connect", wraps=sqlite3.connect) as connect:
+            self.assertEqual(self.run_to_out()[0], 0)
+        uri = connect.call_args.args[0]
+        self.assertTrue(uri.startswith("file:"))
+        self.assertTrue(uri.endswith("?mode=ro"))
+        self.assertTrue(connect.call_args.kwargs.get("uri"))
 
     def test_reads_wal_without_changing_files(self):
         writer = sqlite3.connect(self.db)
